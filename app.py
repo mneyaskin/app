@@ -39,6 +39,9 @@ if "bin_data" not in st.session_state:
 if "modified" not in st.session_state:
     st.session_state.modified = False
 
+if "download_id" not in st.session_state:
+    st.session_state.download_id = 0
+
 
 # ============================================================
 #  QUERY PARAM
@@ -118,6 +121,7 @@ with col_bin:
         st.session_state.bin_data = bytearray(data)
         st.session_state.bin_name = bin_file.name
         st.session_state.modified = False
+        st.session_state.download_id = 0
         st.success(f"BIN загружен: {len(data)} байт")
 
 
@@ -295,6 +299,7 @@ with col_editor:
                 )
                 if ok:
                     st.session_state.modified = True
+                    st.session_state.download_id += 1
                     st.success(f"Записано: {new_val}")
                 else:
                     st.error("Не удалось записать")
@@ -388,9 +393,12 @@ with col_editor:
             apply_btn = st.button("Применить к BIN", key="apply_table")
         with c2:
             if st.button("Перечитать", key="reload_table"):
+                if "table_editor" in st.session_state:
+                    del st.session_state["table_editor"]
                 st.rerun()
 
         if apply_btn:
+            # Применяем значения из editor к свежему BIN
             values = []
             for r in range(edited.shape[0]):
                 row = []
@@ -405,7 +413,12 @@ with col_editor:
             ok = core.write_table_eng(bin_data, item, values)
             if ok:
                 st.session_state.modified = True
+                st.session_state.download_id += 1
                 st.success("Таблица применена")
+                # сбрасываем состояние editor, чтобы он перечитал свежие значения
+                if "table_editor" in st.session_state:
+                    del st.session_state["table_editor"]
+                st.rerun()
             else:
                 st.error("Не удалось записать")
 
@@ -418,11 +431,11 @@ st.divider()
 
 col_dl, col_status = st.columns([1, 3])
 with col_dl:
-    fname = st.session_state.bin_name or "modified.bin"
-    if fname.endswith(".bin"):
-        fname = fname[:-4] + "_modified.bin"
-    else:
-        fname = fname + "_modified.bin"
+    base_name = st.session_state.bin_name or "modified.bin"
+    if base_name.endswith(".bin"):
+        base_name = base_name[:-4]
+    ver = st.session_state.get("download_id", 0)
+    fname = f"{base_name}_v{ver}.bin"
 
     st.download_button(
         "💾 Скачать BIN",
@@ -430,10 +443,14 @@ with col_dl:
         file_name=fname,
         mime="application/octet-stream",
         use_container_width=True,
+        key=f"download_btn_{ver}",
     )
 
 with col_status:
     if st.session_state.modified:
-        st.warning("BIN изменён — не забудьте скачать.")
+        st.warning(
+            f"BIN изменён ({st.session_state.download_id} правок) — "
+            f"не забудьте скачать."
+        )
     else:
         st.info("BIN не изменялся.")
